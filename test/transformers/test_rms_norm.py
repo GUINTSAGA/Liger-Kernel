@@ -358,3 +358,15 @@ def test_dtensor_rms_norm(world_size, bs, sl, hd, dtype, atol, rtol, offset, cas
             nprocs=world_size,
             join=True,
         )
+
+
+# Prevent unnecessary JIT specialization on dynamic row counts.
+@pytest.mark.skipif(device != "npu", reason="requires Ascend")
+def test_ascend_rms_norm_runtime_rows():
+    from liger_kernel.ops.backends._ascend.ops import rms_norm
+
+    for direction in ("forward", "backward"):
+        for path in ("row", "fused_2d", "tiled"):
+            kernel = getattr(rms_norm, f"_rms_norm_{direction}_{path}")
+            n_rows = next(param for param in kernel.params if param.name == "n_rows")
+            assert not n_rows.is_constexpr
