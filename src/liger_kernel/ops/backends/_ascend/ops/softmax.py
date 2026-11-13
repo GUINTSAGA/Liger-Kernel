@@ -93,8 +93,8 @@ def _softmax_multi_block_forward_kernel(
 
     for row_idx in tl.range(row_start, n_rows, num_prog):
         row_start_ptr = X_ptr + row_idx * X_row_stride
-        m = tl.float32(float("-inf"))
-        d = tl.float32(0.0)
+        m = tl.full((), float("-inf"), dtype=tl.float32)
+        d = tl.full((), 0.0, dtype=tl.float32)
 
         for start in tl.range(0, n_cols, BLOCK_SIZE):
             idx = start + col_offsets

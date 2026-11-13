@@ -139,3 +139,16 @@ def test_softmax_large_row_offset():
 
     assert_verbose_allclose(y[-1].float(), y_ref, atol=5e-2, rtol=5e-2)
     assert_verbose_allclose(x.grad[-1].float(), x_ref.grad, atol=5e-2, rtol=5e-2)
+
+
+@pytest.mark.skipif(device != "npu", reason="requires Ascend")
+def test_ascend_softmax_multi_block_forward_backward():
+    x = torch.randn(3, 8193, device=device, dtype=torch.float32, requires_grad=True)
+    ref_x = x.detach().clone().requires_grad_(True)
+    upstream = torch.randn_like(x)
+    actual = liger_softmax(x)
+    expected = torch.softmax(ref_x, dim=-1)
+    (actual_grad,) = torch.autograd.grad(actual, x, upstream)
+    (expected_grad,) = torch.autograd.grad(expected, ref_x, upstream)
+    torch.testing.assert_close(actual, expected, atol=1e-5, rtol=1e-5)
+    torch.testing.assert_close(actual_grad, expected_grad, atol=1e-5, rtol=1e-5)
