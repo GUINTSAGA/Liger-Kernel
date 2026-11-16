@@ -312,3 +312,23 @@ def test_multidimensional_input(shape):
 
     assert x.grad is not None, "Gradient should be computed for input"
     assert x.grad.shape == shape, f"Gradient shape {x.grad.shape} != input shape {shape}"
+
+
+@pytest.mark.skipif(device != "npu", reason="requires Ascend")
+@pytest.mark.parametrize("rows", [1, 2])
+def test_ascend_wide_backward(rows):
+    from liger_kernel.ops.backends._ascend.ops.poly_norm import LigerPolyNormFunction as AscendPolyNormFunction
+
+    x = torch.randn(rows, 4096, device=device, requires_grad=True)
+    grad_output = torch.ones_like(x)
+    reference = NaivePolyNorm().to(device)
+    inputs = (x, reference.weight, reference.bias)
+
+    expected = reference(x)
+    expected_grads = torch.autograd.grad(expected, inputs, grad_output)
+    actual = AscendPolyNormFunction.apply(*inputs, reference.eps, False)
+    actual_grads = torch.autograd.grad(actual, inputs, grad_output)
+
+    torch.testing.assert_close(actual, expected, atol=3e-4, rtol=1e-6)
+    for actual_grad, expected_grad in zip(actual_grads, expected_grads, strict=True):
+        torch.testing.assert_close(actual_grad, expected_grad, atol=3e-4, rtol=1e-6)

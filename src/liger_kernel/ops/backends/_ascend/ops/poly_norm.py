@@ -373,8 +373,8 @@ def _poly_norm_backward_kernel_npu(
     W_ptr,
     RSTD_ptr,
     RSTD_row_stride,
-    dW_ptr,
-    dB_ptr,
+    grad_partials_ptr,
+    grad_partials_stride,
     n_rows: tl.constexpr,
     n_cols: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
@@ -478,10 +478,11 @@ def _poly_norm_backward_kernel_npu(
             dw2_acc += tl.sum(rstd_1 * dY_block * X_pow1)
             db_acc += tl.sum(dY_block)
 
-    tl.store(dW_ptr + 0, dw0_acc)
-    tl.store(dW_ptr + 1, dw1_acc)
-    tl.store(dW_ptr + 2, dw2_acc)
-    tl.store(dB_ptr, db_acc)
+    partial = grad_partials_ptr + pid * grad_partials_stride
+    tl.store(partial + 0, dw0_acc)
+    tl.store(partial + 1, dw1_acc)
+    tl.store(partial + 2, dw2_acc)
+    tl.store(partial + 3, db_acc)
 
 
 # -----------------------------------------------------------------------------
@@ -700,11 +701,10 @@ def poly_norm_backward(dY, X, W, RSTD, in_place):
         dW = dW_scratch.sum(dim=0).to(W.dtype)
         dB = dB_scratch.sum().to(W.dtype)
     else:
-        # Large kernel: use column blocking with atomic operations
         grid_size = min(num_cores, n_rows)
 
-        dW = torch.zeros(3, dtype=torch.float32, device=W.device)
-        dB = torch.zeros(1, dtype=torch.float32, device=W.device)
+        # Give each program a separate 32-byte region for its FP32 partials.
+        grad_partials = torch.empty((grid_size, 8), dtype=torch.float32, device=W.device)
 
         _poly_norm_backward_kernel_npu[(grid_size,)](
             dY,
@@ -716,15 +716,15 @@ def poly_norm_backward(dY, X, W, RSTD, in_place):
             W,
             RSTD,
             RSTD.stride(0),
-            dW,
-            dB,
+            grad_partials,
+            grad_partials.stride(0),
             n_rows,
             n_cols,
             BLOCK_SIZE=BLOCK_SIZE_BACKWARD,
         )
 
-        dW = dW.to(W.dtype)
-        dB = dB.squeeze().to(W.dtype)
+        grads = grad_partials[:, :4].sum(dim=0).to(W.dtype)
+        dW, dB = grads[:3], grads[3]
 
     # Reshape dX back to original shape
     dX = dX.view(*shape)
