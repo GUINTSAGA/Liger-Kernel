@@ -108,6 +108,22 @@ def test_liger_softmax_functional(shape, dtype, atol, rtol):
     assert_verbose_allclose(x1.grad, x2.grad, atol=atol, rtol=rtol)
 
 
+@pytest.mark.skipif(device != "npu", reason="requires Ascend NPU")
+def test_ascend_softmax_multi_block_forward_backward():
+    torch.manual_seed(0)
+    x = torch.randn(3, 8193, device=device, dtype=torch.float32, requires_grad=True)
+    ref_x = x.detach().clone().requires_grad_(True)
+    grad_output = torch.randn_like(x)
+
+    actual = liger_softmax(x)
+    expected = torch.softmax(ref_x, dim=-1)
+    (actual_grad,) = torch.autograd.grad(actual, x, grad_output)
+    (expected_grad,) = torch.autograd.grad(expected, ref_x, grad_output)
+
+    assert_verbose_allclose(expected, actual, atol=1e-5, rtol=1e-5)
+    assert_verbose_allclose(expected_grad, actual_grad, atol=1e-5, rtol=1e-5)
+
+
 def test_softmax_int32_row_offset_wraps():
     """The first overflowing row offset wraps in int32."""
     row_id = torch.tensor(2**16, dtype=torch.int32)
