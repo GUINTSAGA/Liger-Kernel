@@ -314,7 +314,7 @@ def test_multidimensional_input(shape):
     assert x.grad.shape == shape, f"Gradient shape {x.grad.shape} != input shape {shape}"
 
 
-@pytest.mark.skipif(device != "npu", reason="requires Ascend")
+@pytest.mark.skipif(device != "npu", reason="requires Ascend NPU")
 @pytest.mark.parametrize("rows", [1, 2])
 def test_ascend_wide_backward(rows):
     from liger_kernel.ops.backends._ascend.ops.poly_norm import LigerPolyNormFunction as AscendPolyNormFunction

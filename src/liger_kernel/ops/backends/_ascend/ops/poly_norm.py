@@ -703,8 +703,7 @@ def poly_norm_backward(dY, X, W, RSTD, in_place):
     else:
         grid_size = min(num_cores, n_rows)
 
-        # Give each program a separate 32-byte region for its FP32 partials.
-        grad_partials = torch.empty((grid_size, 8), dtype=torch.float32, device=W.device)
+        grad_partials = torch.empty((grid_size, 4), dtype=torch.float32, device=W.device)
 
         _poly_norm_backward_kernel_npu[(grid_size,)](
             dY,
